@@ -1,0 +1,23 @@
+{
+	"name": "winxargs",
+	"solution": "winxargs2013.sln",
+	
+	"targetproject": "zzzDist",
+	"configuration": "zzzDist",
+		
+    "targets": [
+            {
+                "outdir" : "C:/Linkout/winxargs/",
+                "setoutdirforbuild": true
+            }
+    ],
+    "archivedir": "C:/Linkout/",
+    "remotedir": "http://ambiesoft.fam.cx/ffdav/uploads/winxargs/",
+    "remotesha1" : "http://ambiesoft.fam.cx/ffdav/uploads/getSha1.php?file=winxargs/{}",
+    
+    "TotalFileCount": 10,
+    
+   
+    "obtainverfrom": "history.txt",
+    "obtainverregex": "\\d+\\.\\d+"
+}
