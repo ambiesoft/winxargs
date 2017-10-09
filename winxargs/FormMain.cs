@@ -20,6 +20,13 @@ namespace winxargs
 
         const string KEY_CONFIGITEM_COUNT = "ConfigItemCount";
         const string KEY_CONFIGITEM_NAME = "ConfigItemName";
+        const string KEY_CONFIGITEM_FILENAME = "ConfigItemFileName";
+        const string KEY_CONFIGITEM_ARGUMENTSBEFORE = "ConfigItemArgumentsBefore";
+        const string KEY_CONFIGITEM_PREFIX = "ConfigItemPrefix";
+        const string KEY_CONFIGITEM_SUFFIX = "ConfigItemSuffix";
+        const string KEY_CONFIGITEM_ARGUMENTSAFTER = "ConfigItemArgumentsAfter";
+
+
         const string KEY_SELECTED_CONFIGITEM = "SelectedConfigItem";
         
         const string COLUMN_FILE = "File";
@@ -77,9 +84,36 @@ namespace winxargs
                 key += i.ToString();
                 string name;
                 Profile.GetString(SECTION_OPTION, key, string.Empty, out name, ini);
-                cmbConfig.Items.Add(new ConfigItem(name));
+
+                string filename;
+                key = KEY_CONFIGITEM_FILENAME;
+                key += i.ToString();
+                Profile.GetString(SECTION_OPTION, key, string.Empty, out filename, ini);
+
+                string argumentsbefore;
+                key = KEY_CONFIGITEM_ARGUMENTSBEFORE;
+                key += i.ToString();
+                Profile.GetString(SECTION_OPTION, key, string.Empty, out argumentsbefore, ini);
+
+                string prefix;
+                key = KEY_CONFIGITEM_PREFIX;
+                key += i.ToString();
+                Profile.GetString(SECTION_OPTION, key, string.Empty, out prefix, ini);
+
+                string suffix;
+                key = KEY_CONFIGITEM_SUFFIX;
+                key += i.ToString();
+                Profile.GetString(SECTION_OPTION, key, string.Empty, out suffix, ini);
+
+                string argumentsafter;
+                key = KEY_CONFIGITEM_ARGUMENTSAFTER;
+                key += i.ToString();
+                Profile.GetString(SECTION_OPTION, key, string.Empty, out argumentsafter, ini);
+
+                cmbConfig.Items.Add(new ConfigItem(name, filename, argumentsbefore, prefix, suffix, argumentsafter, false));
             }
-            cmbConfig.Items.Add(new ConfigItem(Properties.Resources.S_EDIT_ITEM, true));
+            cmbConfig.Items.Add(new ConfigItem(Properties.Resources.S_EDIT_ITEM,
+                string.Empty,string.Empty,string.Empty,string.Empty,string.Empty,true));
 
             string selName = null;
             Profile.GetString(SECTION_OPTION, KEY_SELECTED_CONFIGITEM, null, out selName, ini);
@@ -88,6 +122,69 @@ namespace winxargs
                 cmbConfig.SelectedIndex = cmbConfig.FindString(selName);
             }
             
+        }
+        private void FormMain_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            bool failed = false;
+
+            HashIni ini = Profile.ReadAll(IniPath);
+
+            AmbLib.SaveListViewColumnWidth(lvMain, SECTION_OPTION, KEY_COLUMN_WIDTH, ini);
+
+            ConfigItem editItem = null;
+            foreach (ConfigItem item in cmbConfig.Items)
+            {
+                if (item.IsAddingNewItem)
+                    editItem = item;
+            }
+            Debug.Assert(editItem != null);
+            cmbConfig.Items.Remove(editItem);
+
+            for (int i = 0; i < cmbConfig.Items.Count; ++i)
+            {
+                ConfigItem item = (ConfigItem)cmbConfig.Items[i];
+                string key = KEY_CONFIGITEM_NAME;
+                key += i.ToString();
+                Profile.WriteString(SECTION_OPTION, key, item.Name, ini);
+
+                key = KEY_CONFIGITEM_FILENAME;
+                key += i.ToString();
+                Profile.WriteString(SECTION_OPTION, key, item.FileName, ini);
+
+                key = KEY_CONFIGITEM_ARGUMENTSBEFORE;
+                key += i.ToString();
+                Profile.WriteString(SECTION_OPTION, key, item.ArgumentsBefore, ini);
+
+                key = KEY_CONFIGITEM_PREFIX;
+                key += i.ToString();
+                Profile.WriteString(SECTION_OPTION, key, item.Prefix, ini);
+
+                key = KEY_CONFIGITEM_SUFFIX;
+                key += i.ToString();
+                Profile.WriteString(SECTION_OPTION, key, item.Suffix, ini);
+
+                key = KEY_CONFIGITEM_ARGUMENTSAFTER;
+                key += i.ToString();
+                Profile.WriteString(SECTION_OPTION, key, item.ArgumentsAfter, ini);
+
+            }
+            Profile.WriteInt(SECTION_OPTION, KEY_CONFIGITEM_COUNT, cmbConfig.Items.Count, ini);
+
+            ConfigItem selItem = (ConfigItem)cmbConfig.SelectedItem;
+            if (selItem != null)
+            {
+                Profile.WriteString(SECTION_OPTION, KEY_SELECTED_CONFIGITEM, selItem.Name, ini);
+            }
+
+            failed |= !Profile.WriteAll(ini, IniPath);
+            if (failed)
+            {
+                Ambiesoft.CenteredMessageBox.Show(this,
+                    Properties.Resources.S_INISAVE_FAILED,
+                    Application.ProductName,
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
         }
 
         private string getVideoLengthWork(string ins)
@@ -235,76 +332,98 @@ namespace winxargs
             this.Text = string.Format("{0}",
                 Application.ProductName);
         }
-            
-   
 
+
+        static string trans(Match m)
+        {
+            string ret = string.Empty;
+            string x = m.ToString();
+            if (x == "${$}")
+            {
+                ret = "$";
+            }
+            else if (x == "${SaveFile}")
+            {
+                using (SaveFileDialog sfd = new SaveFileDialog())
+                {
+                    if (DialogResult.OK != sfd.ShowDialog())
+                    {
+                        _runCanceled = true;
+                        return x;
+                    }
+                    ret = AmbLib.doubleQuoteIfSpace(sfd.FileName);
+                }
+            }
+            return ret;
+        }
+        static bool _runCanceled;
         private void btnJoin_Click(object sender, EventArgs e)
         {
-            if (lvMain.Items.Count < 2)
+            if (lvMain.Items.Count < 1)
             {
-                AmbLib.Alert(Properties.Resources.S_NO_ITEMS);
+                AmbLib.Alert(this,Properties.Resources.S_NO_ITEMS);
                 return;
             }
 
-
-
-            string outfilename = null;
-            foreach (ListViewItem item in lvMain.Items)
+            ConfigItem item = (ConfigItem)cmbConfig.SelectedItem;
+            if (item == null)
             {
-                string file = item.Text;
-                FileInfo fi = new FileInfo(file);
-                if (outfilename == null)
-                    outfilename = fi.Name;
-                else
-                {
-                    int isame = 0;
-                    try
-                    {
-                        for (int i = 0; i < fi.Name.Length; ++i)
-                        {
-                            if (fi.Name[i] == outfilename[i])
-                                isame = i + 1;
-                            else
-                                break;
-                        }
-                    }
-                    catch (Exception) { }
-
-                    outfilename = outfilename.Substring(0, isame);
-                }
+                AmbLib.Alert(this,Properties.Resources.S_NO_CONFIG);
+                return;
             }
 
-            // find initdir for savedialog
-            string initDir = null;
-            foreach (ListViewItem item in lvMain.Items)
+            string filename = item.FileName;
+            StringBuilder sbArguments = new StringBuilder();
+            if (!string.IsNullOrEmpty(item.ArgumentsBefore))
             {
-                string d = Path.GetDirectoryName(item.Text);
-                if (initDir == null)
-                {
-                    initDir = d;
-                    continue;
-                }
-
-                if (d != initDir)
-                {
-                    initDir = null;
+                _runCanceled = false;
+                string transed = Regex.Replace(item.ArgumentsBefore, "\\${.*}",
+                    new MatchEvaluator(trans));
+                if (_runCanceled)
                     return;
-                }
+                sbArguments.Append(transed);
+                sbArguments.Append(" ");
             }
 
-
-
-            string tempfile = Path.GetTempFileName();
-            using (TextWriter writer = File.CreateText(tempfile))
+            // append listitems to sbArgument
+            bool spaceAppended = false;
+            foreach (ListViewItem lvi in lvMain.Items)
             {
-                foreach (ListViewItem item in lvMain.Items)
-                {
-                    writer.Write(@"file '");
-                    writer.Write(item.Text);
-                    writer.Write(@"'");
-                    writer.WriteLine();
-                }
+                if (!string.IsNullOrEmpty(item.Prefix))
+                    sbArguments.Append(item.Prefix);
+
+                sbArguments.Append(AmbLib.doubleQuoteIfSpace(lvi.Text));
+
+                if (!string.IsNullOrEmpty(item.Suffix))
+                    sbArguments.Append(item.Suffix);
+
+                sbArguments.Append(" ");
+                spaceAppended = true;
             }
+            if(!spaceAppended)
+                sbArguments.Append(" ");
+
+            if (!string.IsNullOrEmpty(item.ArgumentsAfter))
+            {
+                _runCanceled = false;
+                string transed = Regex.Replace(item.ArgumentsAfter, "\\${.*}",
+                    new MatchEvaluator(trans));
+                if (_runCanceled)
+                    return;
+                sbArguments.Append(transed);
+            }
+
+            //string tempfile = Path.GetTempFileName();
+            //using (TextWriter writer = File.CreateText(tempfile))
+            //{
+            //    foreach (ListViewItem item in lvMain.Items)
+            //    {
+            //        writer.Write(@"file '");
+            //        writer.Write(item.Text);
+            //        writer.Write(@"'");
+            //        writer.WriteLine();
+            //    }
+            //}
 
 
             //string outfile=null;
@@ -333,26 +452,43 @@ namespace winxargs
             //argument += " -c copy \"";
             //argument += outfile;
             //argument += "\"";
-            
 
-            //ProcessStartInfo psi = new ProcessStartInfo();
-            //psi.FileName = ffmpeg;
-            //psi.Arguments = argument;
-            //psi.RedirectStandardOutput = false;
-            //psi.RedirectStandardError = false;
-            //psi.UseShellExecute = false;
-            //psi.CreateNoWindow = false;
+            StringBuilder sbResult = new StringBuilder();
 
-            //Process p = Process.Start(psi);
-            //p.WaitForExit();
-            //string prevsum = getSum().ToString().TrimEnd('0');
-            //string resultsum = getVideoLength(outfile);
-            //Ambiesoft.CenteredMessageBox.Show(this,
-            //    "prev sum duration =\t" + prevsum + "\r\n" + "result duration =\t\t" + resultsum,
-            //    Application.ProductName,
-            //    MessageBoxButtons.OK,
-            //    MessageBoxIcon.Information);
-            //File.Delete(tempfile);
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = filename;
+                psi.Arguments = sbArguments.ToString();
+                psi.RedirectStandardOutput = false;
+                psi.RedirectStandardError = false;
+                psi.UseShellExecute = false;
+                psi.CreateNoWindow = false;
+
+                if (DialogResult.Yes != CenteredMessageBox.Show(this,
+                    string.Format(Properties.Resources.S_ARE_YOU_SURE_TO_LAUNCH,
+                        psi.FileName,
+                        psi.Arguments),
+                    Application.ProductName,
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question))
+                {
+                    return;
+                }
+
+                using (ProcessingDialog pdlg = new ProcessingDialog(psi))
+                {
+                    pdlg.ShowDialog();
+                }
+                //Process p = Process.Start(psi);
+                //p.WaitForExit();
+
+                //AmbLib.Info(this,string.Format(Properties.Resources.S_PROGFINISHED_WITH_RETVAL, p.ExitCode));
+            }
+            catch (Exception ex)
+            {
+                AmbLib.Alert(this,ex);
+            }
         }
 
         private bool _reverse = false;
@@ -374,48 +510,7 @@ namespace winxargs
 
        
 
-        private void FormMain_FormClosed(object sender, FormClosedEventArgs e)
-        {
-            bool failed = false;
 
-            HashIni ini = Profile.ReadAll(IniPath);
-
-            AmbLib.SaveListViewColumnWidth(lvMain, SECTION_OPTION, KEY_COLUMN_WIDTH, ini);
-
-            ConfigItem editItem = null;
-            foreach (ConfigItem item in cmbConfig.Items)
-            {
-                if (item.IsAddingNewItem)
-                    editItem = item;
-            }
-            Debug.Assert(editItem != null);
-            cmbConfig.Items.Remove(editItem);
-
-            for (int i = 0; i < cmbConfig.Items.Count; ++i)
-            {
-                ConfigItem item = (ConfigItem)cmbConfig.Items[i];
-                string key = KEY_CONFIGITEM_NAME;
-                key += i.ToString();
-                Profile.WriteString(SECTION_OPTION, key, item.Name, ini);
-            }
-            Profile.WriteInt(SECTION_OPTION, KEY_CONFIGITEM_COUNT, cmbConfig.Items.Count, ini);
-
-            ConfigItem selItem = (ConfigItem)cmbConfig.SelectedItem;
-            if (selItem != null)
-            {
-                Profile.WriteString(SECTION_OPTION, KEY_SELECTED_CONFIGITEM, selItem.Name, ini);
-            }
-
-            failed |= !Profile.WriteAll(ini, IniPath);
-            if (failed)
-            {
-                Ambiesoft.CenteredMessageBox.Show(this,
-                    Properties.Resources.S_INISAVE_FAILED,
-                    Application.ProductName,
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-            }
-        }
 
 
 
@@ -533,24 +628,53 @@ namespace winxargs
             }
         }
 
+        ConfigItem _lastSelectedItem;
         private void cmbConfig_SelectedIndexChanged(object sender, EventArgs e)
         {
-            ConfigItem item = (ConfigItem)cmbConfig.SelectedItem;
+            ConfigItem selitem = (ConfigItem)cmbConfig.SelectedItem;
             List<ConfigItem> all = new List<ConfigItem>();
             foreach (ConfigItem o in cmbConfig.Items)
                 all.Add(o);
 
-            if (item.IsAddingNewItem)
+            try
             {
-                using (ConfigDialog configDialog = new ConfigDialog(all))
+                if (selitem.IsAddingNewItem)
                 {
-                    if (DialogResult.OK != configDialog.ShowDialog())
-                        return;
+                    using (ConfigDialog configDialog = new ConfigDialog(all))
+                    {
+                        if (DialogResult.OK != configDialog.ShowDialog())
+                            return;
 
-                    ConfigItem newItem = configDialog.Result;
-                    cmbConfig.Items.Add(newItem);
-                    cmbConfig.SelectedItem = newItem;
+                        ConfigItem newItem = configDialog.Result;
+                        if (newItem != null)
+                        {
+                            cmbConfig.Items.Add(newItem);
+                            cmbConfig.SelectedItem = newItem;
+                        }
+                        else
+                        {
+                            if (_lastSelectedItem != null)
+                            {
+                                // still exists in cmbBox?
+                                bool still = false;
+                                foreach (ConfigItem item in cmbConfig.Items)
+                                {
+                                    if (item == _lastSelectedItem)
+                                    {
+                                        still = true;
+                                        break;
+                                    }
+                                }
+                                if (still)
+                                    cmbConfig.SelectedItem = _lastSelectedItem;
+                            }
+                        }
+                    }
                 }
+            }
+            finally
+            {
+                _lastSelectedItem = selitem;
             }
         }
     }

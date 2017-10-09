@@ -21,6 +21,7 @@ namespace winxargs
             {
                 cmbConfig.Items.Add(item);
             }
+            cmbConfig.SelectedIndex = 0;
         }
 
         bool IsNameOK(ConfigItem targetitem, bool empok)
@@ -37,6 +38,8 @@ namespace winxargs
 
             foreach (ConfigItem item in _all)
             {
+                if (targetitem == null)
+                    continue;
                 if (targetitem == item)
                     continue;
                 if (item.IsAddingNewItem)
@@ -57,16 +60,46 @@ namespace winxargs
             if (this.DialogResult != DialogResult.OK)
                 return;
 
+            e.Cancel = true;
             // closing with OK
             // check the inputs
+            ConfigItem item = (ConfigItem)cmbConfig.SelectedItem;
+            if (item == null)
+            {
+                e.Cancel = false;
+            }
+            else if (item.IsAddingNewItem)
+            {
+                // assume fail
 
-            // assume fail
-            e.Cancel = true;
-            if (!IsNameOK(null, false))
-                return;
+                if (!IsNameOK(null, false))
+                    return;
 
-            _result = new ConfigItem(txtName.Text);
-            e.Cancel = false;
+                _result = new ConfigItem(
+                    txtName.Text,
+                    txtFilename.Text,
+                    txtArgumentsBefore.Text,
+                    txtPrefix.Text,
+                    txtSuffix.Text,
+                    txtArgumentsAfter.Text,
+                    false);
+                e.Cancel = false;
+            }
+            else
+            {
+                // existing item
+                if (!IsNameOK(item, true))
+                    return;
+                if (!string.IsNullOrEmpty(txtName.Text))
+                    item.Name = txtName.Text;
+
+                item.FileName = txtFilename.Text;
+                item.ArgumentsBefore = txtArgumentsBefore.Text;
+                item.Prefix = txtPrefix.Text;
+                item.Suffix = txtSuffix.Text;
+                item.ArgumentsAfter = txtArgumentsAfter.Text;
+                e.Cancel = false;
+            }
         }
 
         ConfigItem _result;
@@ -97,6 +130,12 @@ namespace winxargs
                         return;
                     if (!string.IsNullOrEmpty(txtName.Text))
                         item.Name = txtName.Text;
+
+                    item.FileName = txtFilename.Text;
+                    item.ArgumentsBefore = txtArgumentsBefore.Text;
+                    item.Prefix = txtPrefix.Text;
+                    item.Suffix = txtSuffix.Text;
+                    item.ArgumentsAfter = txtArgumentsAfter.Text;
                 }
                 failed = false;
             }
@@ -116,13 +155,36 @@ namespace winxargs
             _lastSelection = item;
             if (item.IsAddingNewItem)
             {
-                txtName.Text = string.Empty;
+                txtName.Text =
+                    txtFilename.Text =
+                    txtArgumentsBefore.Text =
+                    txtPrefix.Text =
+                    txtSuffix.Text =
+                    txtArgumentsAfter.Text=
+                    string.Empty;
                 return;
             }
             else
             {
                 txtName.Text = item.Name;
+                txtFilename.Text = item.FileName;
+                txtArgumentsBefore.Text = item.ArgumentsBefore;
+                txtPrefix.Text = item.Prefix;
+                txtSuffix.Text = item.Suffix;
+                txtArgumentsAfter.Text = item.ArgumentsAfter;
             }
+        }
+
+        private void btnBrowseFile_Click(object sender, EventArgs e)
+        {
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                if (DialogResult.OK != ofd.ShowDialog())
+                    return;
+
+                txtFilename.Text = ofd.FileName;
+            }
+
         }
 
      
